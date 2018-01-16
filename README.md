@@ -1,9 +1,9 @@
 # PyRockSim
 Rocket Simulater wrtie Python.
 
-이 프로젝트는 기본적으로 [pyrocksim][로켓 시뮬레이터]를 기반으로 학습한 내용을 작성한 것이다. 파이썬의 함수와 클래스를 가볍게 다루지만, 자세한 설명은 하지 않으니 참고하기 바란다.  
+이 프로젝트는 기본적으로 [로켓 시뮬레이터][pyrocksim]를 기반으로 학습한 내용을 작성한 것이다. 파이썬의 함수와 클래스를 가볍게 다루지만, 자세한 설명은 하지 않으니 참고하기 바란다.  
 
-[pyrocksim]: https://github.com/rjs1197/PyRockSim.git  
+[pyrocksim]:https://github.com/pyjbooks/PyRockSim  
 
 로케싀 제원에 대한 설정에 기초하여 로켓을 날리고, 일정 시간이 지난 후 고도와 속도, 그리고 그때가지의 비행 궤적을 계산하는 것을 목적으로 한다. 이 프로젝트는 언어의 기능을 충분히 활용하여 중요한 기능을 전저 구현한 프로토타입을 빠른 시간 안에 구축하는 빠른 프로토타이핑(Rapid Prototyping)의 한 예이다.  
 
