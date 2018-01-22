@@ -5,6 +5,12 @@ Copyright (c) 2016 Kenji Nakakuki
 Released under the MIT license
 """
 
+"""
+로켓 시뮬레이터
+
+번역 2018 고명진
+"""
+
 import numpy as np
 from numpy import sin, cos, arcsin, pi
 import matplotlib as mpl
@@ -26,28 +32,28 @@ mpl.rcParams['axes.grid'] = True
 D2R = pi / 180.0
 R2D = 180.0 / pi
 
-# Rocketの諸元設定(M-3S)
+# Rocket의 제원 (M-3S)
 rocket_settings = {
-    'm0': 45247.4,  # [kg] 初期質量
+    'm0': 45247.4,  # [kg] 초기질량
     'Isp': 266,  # [s] Specific Impulse
-    'g0': 9.80665,  # [m/s^2] 重力定数
-    'FT': 1147000,  # [N] 推力（一定）
-    'Tend': 53,  # [s] ロケット燃焼終了時間
-    'Area': 1.41 ** 2 / 4 * pi,  # [m^2] 基準面積
-    'CLa': 3.5,  # [-] 揚力傾斜
-    'length_GCM': [-9.76, 0, 0],  # [m] R/Mジンバル・レバーアーム長
-    'length_A': [-1.0, 0, 0],  # [m] 機体空力中心・レバーアーム長
-    'Ijj': [188106.0, 188106.0, 1839.0],  # [kg*m^2] 慣性能率
-    'IXXdot': 0,  # [kg*m^2/s] 慣性能率変化率 X軸
-    'IYYdot': 0,  # [kg*m^2/s] 慣性能率変化率 Y軸
-    'IZZdot': 0,  # [kg*m^2/s] 慣性能率変化率 Z軸
-    'roll': 0,  # [deg] 初期ロール
-    'pitch': 85.0,  # [deg] 初期ピッチ角
-    'yaw': 120.0,  # [deg] 初期方位角
-    'lat0': 31.251008,  # [deg] 発射地点緯度(WGS84)
-    'lon0': 131.082301,  # [deg] 発射地点経度(WGS84)
-    'alt0': 194,  # [m] 発射地点高度(WGS84楕円体高)
-    # CD定義用のMach数とCDのテーブル
+    'g0': 9.80665,  # [m/s^2] 중력상수
+    'FT': 1147000,  # [N] 추력(일정)
+    'Tend': 53,  # [s] 로켓 연소 종료 시간
+    'Area': 1.41 ** 2 / 4 * pi,  # [m^2] 기준 면적
+    'CLa': 3.5,  # [-] 양력 기울기
+    'length_GCM': [-9.76, 0, 0],  # [m] R/M 심벌 - 레버 암 길이
+    'length_A': [-1.0, 0, 0],  # [m] 기체 공력 중심 - 레버 암 길이
+    'Ijj': [188106.0, 188106.0, 1839.0],  # [kg*m^2] 관성 모멘트
+    'IXXdot': 0,  # [kg*m^2/s] 관성 모멘트 변화율 X축
+    'IYYdot': 0,  # [kg*m^2/s] 관성 모멘트 변화율 Y축 
+    'IZZdot': 0,  # [kg*m^2/s] 관성 모멘트 변화율 Z축
+    'roll': 0,  # [deg] 초기 롤
+    'pitch': 85.0,  # [deg] 초기 피치각
+    'yaw': 120.0,  # [deg] 초기 방위각
+    'lat0': 31.251008,  # [deg] 발사 지점 위도(WGS84)
+    'lon0': 131.082301,  # [deg] 발사 지점 경도(WGS84)
+    'alt0': 194,  # [m] 발사 지점 고도(WGS84 타원체)
+    # CD를 정의하기 위한 Match 수와 CD 표
     'mach_tbl': np.array([0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.1, 1.2, 1.4, 1.6,
                           1.8, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0]),
     'CD_tbl': np.array([0.28, 0.28, 0.28, 0.29, 0.35, 0.64, 0.67, 0.69,
@@ -57,36 +63,36 @@ rocket_settings = {
 
 
 class RocketSim:
-    """ロケットシミュレーション用クラス
+    """ 로켓 시뮬레이션용 클래스
 
-    [座標系定義]
-    射点中心慣性座標系 n : 発射位置原点直交座標系(North-East-Down)
-    ロケット機材座標系 b : XYZ=前方/右舷/下方
+    [좌표계의 정의]
+    사점 중심 관성 좌표계 n : 발사 위치 원점 직교 좌표계(North-East-Down)
+    로켓 기재좌표계 b : XYZ=전방/우현/하방
 
     """
 
     def __init__(self, **kwargs):
-        """ロケットの初期値状態設定
+        """ 로켓의 초깃값 상태 설정
 
-        (1) 常微分方程式に使う状態量ベクトルの初期値 x0 の設定 (14次)
-            m0 : ロケット全体の初期質量 [kg] (1x1)
-            pos0: 射点中心慣性座標系における位置（North-East-Down)[m] (3x1)
-            vel0: 射点中心慣性座標系における速度（North-East-Down)[m/s] (3x1)
-            quat0: 機体座標系から水平座標系に変換を表すクォータニオン[-] (4x1)
-            omega0: 機体座標系における機体に働く角速度[rad/s] (3x1)
-        (2) ロケットの各種諸元設定
-        (3) 制御入力+外乱
-        (4) 質点モデル設定のフラグ
+        (1) 상미분방정식을 사용한 상태새값 벡터의 초깃값 x0의 설정 (14차)
+            m0 : 로켓 전체의 초기 질량 [kg] (1x1)
+            pos0: 시점 중심 관성좌표계에서의 위치（North-East-Down)[m] (3x1)
+            vel0: 시점 중심 관성좌표계에서의 속도（North-East-Down)[m/s] (3x1)
+            quat0: 기체좌표계에서 수평좌표계로의 반환을 나타내는 쿼터니온[-] (4x1)
+            omega0: 기체좌표계에서의 기체에 작용하는 각속도 [rad/s] (3x1)
+        (2) 로켓의 각종 제원 설정
+        (3) 제어 입력 + 외부 노이즈
+        (4) 질점 모형 설정 플래그
         """
 
-        # (1) 状態量ベクトルの初期値 x0 の設定
+        # (1) 상탯값 벡터의 초깃값 x0의 설정
         pos0 = [0.0, 0.0, 0.0]  # m
         vel0 = [0.0, 0.0, 0.0]  # m/s
         quat0, _ = qt.attitude(kwargs['roll'], kwargs['pitch'],
                                kwargs['yaw'])
         omega0 = [0.0, 0.0, 0.0]  # rad/s
         self.x0 = np.array([kwargs['m0'], *pos0, *vel0, *quat0, *omega0])
-        # (2) ロケットの各種諸元設定
+        # (2) 로켓의 각종 제원 설정
         self.isp = kwargs['Isp']
         self.g0 = kwargs['g0']
         self.rm_t_end = kwargs['Tend']
@@ -114,21 +120,21 @@ class RocketSim:
         self.lumped_mass = 1
 
     def rocket_dynamics(self, x, t, u):
-        """ロケットのダイナミクス計算関数
+        """ 로켓의 역학 계산 함수
 
-        引数:
-            x: 状態量x (self.x0 参照)
-            t: time 時刻[s]
-            u: オプションパラメータ
-                u[0]: Ft 推力[N]
-                u[1]: deltaY ヨージンバル角[rad]
-                u[2]: deltaP ピッチジンバル角[rad]
-                u[3]: Tr ロール制御トルク[N*m]
-                u[4]: VWHx 初期水平座標系における風ベクトル North[m/s]
-                u[5]: VWHy 初期水平座標系における風ベクトル East[m/s]
-                u[6]: VWHz 初期水平座標系における風ベクトル Down[m/s]
-        返り値:
-            dx: 状態量 x の時間微分
+        인자:
+            x: 상탯값 x (self.x0 참조)
+            t: time 시각 [s]
+            u: 옵션 파라미터
+                u[0]: Ft 추력 [N]
+                u[1]: deltaY 요 짐벌 각 [rad]
+                u[2]: deltaP 파차 잠볼 각 [rad]
+                u[3]: Tr 롤 제어 토크 [N*m]
+                u[4]: VWHx 초기 수평좌표계에서의 바람 벡터 North[m/s]
+                u[5]: VWHy 초기 수평좌표계에서의 바람 벡터 East[m/s]
+                u[6]: VWHz 초기 수평좌표계에서의 바람 벡터 Down[m/s]
+        리턴 값:
+            dx: 상탯값 x의 시간 미분
         """
 
         # 回転行列 dcm (発射位置NED --> 現在位置NED)を計算
@@ -214,14 +220,14 @@ class RocketSim:
             # moment = mom_t + mom_a + [u[3], 0, 0]
             raise ValueError('Controller is not yet implemented.')
 
-        # 速度運動方程式
+        # 속도 운동 방정식
         ftah = cbn @ (ftb + fab)
         delta_v = (1 / x[0]) * (ftah + fgh)  # 発射点NED座標
 
-        # 姿勢の運動方程式
+        # 잣의 운동 방정식
         delta_quat = qt.deltaquat(quat, x[11:14])
 
-        # 角速度の運動方程式
+        # 각속도의 운동 방정식
         delta_omega = [1 / self.ixx * (moment[0] - self.ixxdot * x[11] -
                                        (self.izz - self.iyy) * x[12] * x[13]),
                        1 / self.iyy * (moment[1] - self.iyydot * x[12] -
@@ -233,7 +239,7 @@ class RocketSim:
         return dx
 
     def odeint_calc(self, t_vec):
-        """ODEソルバーを使ってシミュレーション計算を実行する"""
+        """ 오일러 방법 적분으로 시뮬레이션 계산 """
         dat, dbg = sp.integrate.odeint(self.rocket_dynamics, self.x0, t_vec,
                                        (self.u,), rtol=1.e-3, atol=1.e-3,
                                        full_output=1)
@@ -252,29 +258,29 @@ class RocketSim:
 
 
 def plot_rs(tv, res):
-    """シミュレーション結果のプロット
+    """ 시뮬레이션 결과 그리기
 
-    引数
-        tv: 時間ベクトル [s]
-        res: 時系列計算結果マトリクス(状態量xに対応)
+    인자
+        tv: 시간 벡터 [s]
+        res: 시계열 계산 결과 행렬 (상탯값 x에 해당)
     """
 
     def plot_pos(t, d):
-        """位置のプロット"""
+        """ 위치 그리기 """
         h = plt.figure(1)
-        h.canvas.set_window_title("Fig %2d - 位置（NED）" % h.number)
+        h.canvas.set_window_title("Fig %2d - 위치（NED）" % h.number)
         plt.subplot(3, 1, 1)
         plt.plot(t, d[:, 1] * 1.e-3)
-        plt.xlabel('時間 [s]')
-        plt.ylabel('北方向位置 [km]')
+        plt.xlabel('시간 [s]')
+        plt.ylabel('북방위 위치 [km]')
         plt.subplot(3, 1, 2)
         plt.plot(t, d[:, 2] * 1.e-3)
-        plt.xlabel('時間 [s]')
-        plt.ylabel('東方向位置 [km]')
+        plt.xlabel('시간 [s]')
+        plt.ylabel('동방위 위치 [km]')
         plt.subplot(3, 1, 3)
         plt.plot(t, -d[:, 3] * 1.e-3)
-        plt.xlabel('時間 [s]')
-        plt.ylabel('高度 [km]')
+        plt.xlabel('시간 [s]')
+        plt.ylabel('고도 [km]')
 
     def plot_vel(t, d):
         """速度のプロット"""
@@ -388,10 +394,10 @@ def plot_rs(tv, res):
         plt.subplot(3, 1, 3)
         plt.plot(llh_in[:, 1], llh_in[:, 2] * 1.e-3)
         plt.xlim([minlon, maxlon])
-        plt.xlabel('経度 [deg]')
-        plt.ylabel('高度 [km]')
+        plt.xlabel('경도 [deg]')
+        plt.ylabel('고도 [km]')
 
-    # 必要に応じてプロットを作成
+    # 필요에 따라 플롯 그리기
     plt.close('all')
     plot_pos(tv, res)
     plot_vel(tv, res)
@@ -405,12 +411,12 @@ def plot_rs(tv, res):
 
 
 if __name__ == "__main__":
-    # ロケットオブジェクトを生成
+    # 로켓 객체를 생성
     rs = RocketSim(**rocket_settings)
-    # 計算に使う時間ベクトル
+    # 계산에 사용할 시간 벡터
     tvec = np.arange(0, 100, 0.002)
-    # ロケットシミュレーション（積分計算）実行
-    result, deb = rs.odeint_calc(tvec)  # odeintを使って積分（高速化）
+    # 로켓 시뮬레이션（적분 계산）실행
+    result, deb = rs.odeint_calc(tvec)  # 오일러 방법 적분을 적용한 경우
     # result = rs.euler_calc(tvec)  # オイラー法積分の場合
-    # 結果のプロット
+    # 결과 그리기
     plot_rs(tvec, result)
